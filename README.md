@@ -49,5 +49,13 @@ homework runner.
 
 
 ## Homework 1 solution: 
-> to students: please fill your solution description here.
+```mermaid
+flowchart LR
+    A[Receipt images] --> B[DeepSeek vision extraction]
+    B --> C[JSON: paid, subtotal, discount lines]
+    C --> D[Decimal aggregation]
+    D --> E[Two fixed HKD answers]
+```
+
+The LangChain chain sends each receipt image to the required DeepSeek vision model and extracts the final payment after rounding, the subtotal before rounding, and each printed discount amount. Python sums the final payments for the first fixed question and adds every discount back to each subtotal for the second question, using `Decimal` for currency arithmetic. Rounding is excluded from the undiscounted amount, and the answers contain exactly one HKD amount each.
 

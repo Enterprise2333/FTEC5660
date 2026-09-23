@@ -63,7 +63,46 @@ def build_chain() -> Any:
     ``deepseek-v4-flash-vision-exp``. The API key is loaded from .env.
     """
     ### YOUR CODE HERE
-    return None
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_core.runnables import RunnableLambda
+    from langchain_deepseek import ChatDeepSeek
+
+    instructions = (
+        "Read the receipt image and return only a JSON object with these keys: "
+        "paid, subtotal, discounts. paid is the final amount charged after "
+        "ROUNDING (for example, the OCTOPUS or VISA amount). subtotal is the "
+        "SUBTOTAL/小計 before ROUNDING and after discounts. discounts is a list of "
+        "the amounts of every negative promotion, coupon, member, app, "
+        "packaging-damage, or percentage discount line before SUBTOTAL/小計. "
+        "Use the monetary amount printed at the right of each discount line, "
+        "not an amount mentioned in its description. Exclude ROUNDING and "
+        "everything after the payment line, including repeated card amounts. "
+        "Write all money values as decimal strings without a currency sign; "
+        "write discount amounts as positive strings. Include repeated "
+        "discount lines separately. Example JSON: "
+        '{"paid":"102.30","subtotal":"102.31","discounts":["5.39"]}'
+    )
+
+    def make_messages(image_url: str) -> list[Any]:
+        return [
+            SystemMessage(content=instructions),
+            HumanMessage(
+                content=[
+                    {"type": "text", "text": "Extract the receipt amounts."},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ]
+            ),
+        ]
+
+    model = ChatDeepSeek(
+        model="deepseek-v4-flash-vision-exp",
+        temperature=0,
+        max_retries=2,
+        timeout=60,
+        model_kwargs={"response_format": {"type": "json_object"}},
+    )
+    return RunnableLambda(make_messages) | model | JsonOutputParser()
 
 
 def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
@@ -79,8 +118,21 @@ def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
     to process independent receipt-extraction prompts in parallel.
     """
     ### YOUR CODE HERE
-    _ = (chain, images)
-    return {QUERY_1: DUMMY_RESPONSE, QUERY_2: DUMMY_RESPONSE}
+    paid_total = Decimal("0")
+    original_total = Decimal("0")
+
+    for image in images:
+        receipt = chain.invoke(image_data_url(image))
+        paid = Decimal(str(receipt["paid"]))
+        subtotal = Decimal(str(receipt["subtotal"]))
+        discounts = sum(
+            (abs(Decimal(str(amount))) for amount in receipt["discounts"]),
+            Decimal("0"),
+        )
+        paid_total += paid
+        original_total += subtotal + discounts
+
+    return {QUERY_1: f"HK${paid_total:.2f}", QUERY_2: f"HK${original_total:.2f}"}
 
 
 # Everything below is provided runner/scoring code. No edits are needed.
